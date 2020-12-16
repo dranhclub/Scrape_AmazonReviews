@@ -2,6 +2,8 @@
 
 # Importing Scrapy Library
 import scrapy
+import time
+import re
 
 asin_list = [
     'B083KVM9VW',
@@ -47,23 +49,51 @@ class AmazonReviewsSpider(scrapy.Spider):
         data = response.css('#cm_cr-review_list')
 
         #Get the Name
-        name = data.css('.a-profile-name')
+        names = data.css('.a-profile-name')
+
+        dates = data.css('.review-date')
 
         #Get the Review Title
-        title = data.css('.review-title')
+        titles = data.css('.review-title')
 
         # Get the Ratings
-        star_rating = data.css('.review-rating')
+        star_ratings = data.css('.review-rating')
 
         # Get the users Comments
         comments = data.css('.review-text')
+
+        votes = data.css('.cr-vote-text')
+
         count = 0
 
         # combining the results
-        for review in star_rating:
-            yield{'Name': ''.join(name[count].xpath(".//text()").extract()),
-                  'Title': (''.join(title[count].xpath(".//text()").extract())).strip(),
-                  'Rating': ''.join(review.xpath('.//text()').extract()),
-                  'Comment': (''.join(comments[count].xpath(".//text()").extract())).strip()
-                  }
+        for review in star_ratings:
+            # time.sleep(0.5)
+
+            name = ''.join(names[count].xpath(".//text()").extract())
+            title = (''.join(titles[count].xpath(".//text()").extract())).strip()
+            rating = ''.join(review.xpath('.//text()').extract())
+            comment = (''.join(comments[count].xpath(".//text()").extract())).strip()
+            vote = ''.join(votes[count].xpath(".//text()").extract())
+
+            yield{
+                "overall": float(rating[0:3]),
+                "vote": 1 if vote[0:3] == "One" else int(re.findall("\d+", vote)[0]),
+                "verified": False,
+                # "reviewTime": "05 3, 2011",
+                # "reviewerID": "A2UEO5XR3598GI",
+                # "asin": "B0000530HU",
+                # "style": {
+                #     "Size:": " 7.0 oz",
+                #     "Flavor:": " Classic Ice Blue"
+                # },
+                "reviewerName": name,
+                "reviewText": comment,
+                "summary": title,
+                # "unixReviewTime": 1304380800
+            }
+
             count = count+1
+
+
+# scrapy runspider ./spiders/AmazonReviews.py -o output.json

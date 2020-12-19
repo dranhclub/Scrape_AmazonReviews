@@ -4,36 +4,25 @@
 import scrapy
 import time
 import re
+import json
 
-asin_list = [
-    'B083KVM9VW',
-    'B0777XQ4S8',
-    'B07894S727',
-    'B07NVRXTGG',
-    'B07XSCBSN5',
-    'B07R586J37',
-    'B006A1PGDE',
-    'B00BYH6C1E',
-    'B08FB7W3GF',
-    'B08B1BFRNX',
-    'B07GDKFH9V',
-    'B08G1CT5R8',
-    'B08PJTV7RY',
-    'B0773S1Z9Q',
-    'B07BF25F9S',
-    'B07H5VTHJV'
-]
 
 # Creating a new class to implement Spide
 class AmazonReviewsSpider(scrapy.Spider):
-
     # Spider name
     name = 'amazon_reviews'
+    # Add user_agent to avoid 503 error
+    user_agent = 'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.157 Safari/537.36'
+
+    # Get asin list
+    f = open('./data/asin.txt')
+    asin_list = f.read().split("\n")
+
+    # Test
+    # asin_list = ['B000X7ST9Y']
 
     # Domain names to scrape
     allowed_domains = ['amazon.in']
-
-    myBaseUrl = "https://www.amazon.com/product-reviews/B084D89DBF/ref=cm_cr_getr_d_paging_btm_next_2?ie=UTF8&reviewerType=all_reviews&pageNumber="
 
     start_urls = []
 
@@ -41,59 +30,41 @@ class AmazonReviewsSpider(scrapy.Spider):
     for asin in asin_list:
         for i in range(1, 5):
             start_urls.append(
-                f'https://www.amazon.com/product-reviews/{asin}/ref=cm_cr_getr_d_paging_btm_next_2?ie=UTF8&reviewerType=all_reviews&pageNumber={i}')
+                f'https://www.amazon.com/product-reviews/{asin}/ref=cm_cr_getr_d_paging_btm_next_2?ie=UTF8&reviewerType=all_reviews&pageNumber={i}&sortBy=recent')
 
     # Defining a Scrapy parser
     def parse(self, response):
+        asin = response.request.url[39:49]
+
         #Get the Review List
-        data = response.css('#cm_cr-review_list')
+        div_review_list = response.css('#cm_cr-review_list')
+        div_reviews = div_review_list.css('.review')
+        
+        for div_review in div_reviews:
+            name = div_review.css("span.a-profile-name::text").get()
+            title = (''.join(div_review.css(".review-title").xpath(".//text()").extract())).strip()
+            rating = div_review.css(".review-rating ::text").get()
+            # date = div_review.css(".review-date::text").re(r'(January|February|Match|April|May|June|July|August|October|September|November|December) \d*, \d*')[0]
+            date = div_review.css(".review-date::text").get()
+            text = (''.join(div_review.css(".review-text-content").xpath(".//text()").extract())).strip()
+            vote = div_review.css(".cr-vote-text::text").get()
+            verified = div_review.css('span[data-hook="avp-badge"]::text').get()
 
-        #Get the Name
-        names = data.css('.a-profile-name')
-
-        dates = data.css('.review-date')
-
-        #Get the Review Title
-        titles = data.css('.review-title')
-
-        # Get the Ratings
-        star_ratings = data.css('.review-rating')
-
-        # Get the users Comments
-        comments = data.css('.review-text')
-
-        votes = data.css('.cr-vote-text')
-
-        count = 0
-
-        # combining the results
-        for review in star_ratings:
-            # time.sleep(0.5)
-
-            name = ''.join(names[count].xpath(".//text()").extract())
-            title = (''.join(titles[count].xpath(".//text()").extract())).strip()
-            rating = ''.join(review.xpath('.//text()').extract())
-            comment = (''.join(comments[count].xpath(".//text()").extract())).strip()
-            vote = ''.join(votes[count].xpath(".//text()").extract())
+            # if (date < 2020) continue
 
             yield{
                 "overall": float(rating[0:3]),
-                "vote": 1 if vote[0:3] == "One" else int(re.findall("\d+", vote)[0]),
-                "verified": False,
-                # "reviewTime": "05 3, 2011",
+                "vote": 0 if not vote else 1 if vote[0:3] == "One" else int(re.findall("\d+", vote)[0]),
+                "verified": verified == "Verified Purchase",
+                "reviewTime": date,
                 # "reviewerID": "A2UEO5XR3598GI",
-                # "asin": "B0000530HU",
+                "asin": asin,
                 # "style": {
                 #     "Size:": " 7.0 oz",
                 #     "Flavor:": " Classic Ice Blue"
                 # },
                 "reviewerName": name,
-                "reviewText": comment,
+                "reviewText": text,
                 "summary": title,
                 # "unixReviewTime": 1304380800
             }
-
-            count = count+1
-
-
-# scrapy runspider ./spiders/AmazonReviews.py -o output.json

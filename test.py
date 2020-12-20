@@ -1,5 +1,6 @@
 import re
-string = "Reviewed in the United States on August 14, 2017"
 
-res = re.findall('(January|February|Match|April|May|June|July|August|October|September|November|December) \d*, \d*', string)
-print(res)
+string = "Reviewed in the United States on January 9, 2017"
+
+res = re.findall("on (.*)", string)
+print(res[0])

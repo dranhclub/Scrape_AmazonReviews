@@ -1,15 +1,27 @@
 # Scrape_AmazonReviews
 
-# Các bước thực hiện
+# Cách chạy
+- Cần cài `scrapy` để chạy:  
+`pip install scrapy`
+- Sau đó chạy lệnh:  
+`scrapy runspider ./spiders/AmazonReviews.py -o output.json` 
+- hoặc  
+`./run-spider.sh`
 
-## B1: Lấy danh sách asin từ dữ liệu json đã có sẵn 
+# Cách xử lý khi bị chặn
+- Dùng trình duyệt, truy cập vào trang review của sản phẩm bất kỳ, ví dụ:  
+https://www.amazon.com/product-reviews/B00MGK9Z8U/?ie=UTF8&reviewerType=all_reviews&pageNumber=1&sortBy=recent
 
-Dữ liệu json được download từ https://nijianmo.github.io/amazon/index.html
-Tuy nhiên dữ liệu này chỉ từ 2018 trở về trước
-Ta cần lấy danh sách các asin từ đây để crawl các review từ 2019 trở đi
+- Mở devTool (F12), chọn thẻ Network, chuột phải vào item đầu tiên (chính là toàn bộ webpage), chọn copy cURL
 
-## B2: Crawl review mới
+- Vào https://curl.trillworks.com/ , paste nội dung cURL vào ô bên trái
 
-Cho danh sách các asin vào scraper để crawl
+- Lấy object header ở ô bên phải, dán vào object header tương ứng trong AmazonReviews.py
 
-`$ ./run-spider.sh` to run scraper
+        for url in urls:
+            yield scrapy.Request(
+                url=url,
+                callback=self.parse,
+                headers = {
+                    ....
+                })

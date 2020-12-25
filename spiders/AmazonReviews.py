@@ -5,6 +5,8 @@ import scrapy
 import pandas
 import re
 import os
+import json
+from kafka import KafkaProducer
 
 # Creating a new class to implement Spide
 class AmazonReviewsSpider(scrapy.Spider):
@@ -61,18 +63,19 @@ class AmazonReviewsSpider(scrapy.Spider):
                 callback=self.parse,
                 headers = {
                     'authority': 'www.amazon.com',
+                    'cache-control': 'max-age=0',
                     'rtt': '150',
-                    'downlink': '3.6',
+                    'downlink': '10',
                     'ect': '4g',
                     'upgrade-insecure-requests': '1',
                     'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.75 Safari/537.36',
                     'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-                    'sec-fetch-site': 'none',
+                    'sec-fetch-site': 'same-origin',
                     'sec-fetch-mode': 'navigate',
                     'sec-fetch-user': '?1',
                     'sec-fetch-dest': 'document',
-                    'accept-language': 'vi,en;q=0.9,vi-VN;q=0.8,fr-FR;q=0.7,fr;q=0.6,en-US;q=0.5',
-                    'cookie': 'session-id=134-6963383-2747461; session-id-time=2082787201l; i18n-prefs=USD; sp-cdn="L5Z9:VN"; ubid-main=133-1347932-2471723; _msuuid_jniwozxj70=DAE7076A-43D8-453B-990F-130D8D488223; lc-main=en_US; s_vnum=2040358968123%26vn%3D1; s_nr=1608358986685-New; s_dslv=1608358986691; session-token=UlPOLRBvWO/AbNZ98STz+3KFK3K14aXDE9eaDdrY4hFkq2vKMgY9UAAv2I0iWa2fJrfF21K/A6yl35PkpTExBSXhgJwYCqXs7AJaadcjgpIQnO5dkfpBvIQQMAAS49GmxF/jW34bfraDumjymHgDI6O47XdnHW8BUcAScVijfJkv5AK94Ra3gBaeV06PQ+hB; csm-hit=tb:KG661VQ6RY1NT6K1C1DR+s-7PXJY791T4M94GMG5AZX|1608710224664&t:1608710224664&adb:adblk_yes',
+                    'accept-language': 'vi',
+                    'cookie': 'session-id=138-6255665-1654405; session-id-time=2082787201l; i18n-prefs=USD; sp-cdn="L5Z9:VN"; csm-hit=tb:s-4AV1FXKH1Z7MRF3XTDDF|1608819281646&t:1608819282343&adb:adblk_no; ubid-main=135-1487796-1570604; session-token=49Qiq/+7Tsy83tNq6/qIXcfvuOvAM24hzNTBouHtlEzBqq2CZ3HTqRDXmoD5boA0P61qI7dLapGhrVESItWRnIbEn5sdNc4sB7I9Ea6jKNrw7hY070Uy8pGUEY5T+n1hucviIZuf8ykwHv3ZJG2otZ6ZOwRCOChafCj9z+7d3+p+qnZtWBK2ixnSmizJUuSRIZIU4t40rDQ9cZUVUZgNGUMlZesoWjTsCRh3Mn2xmRnZgkK9V+aIz+KMiHQyQM0M',
                 })
 
     def parse(self, response):
@@ -82,6 +85,10 @@ class AmazonReviewsSpider(scrapy.Spider):
         div_review_list = response.css('#cm_cr-review_list')
         div_reviews = div_review_list.css('.review')
         
+        if len(div_reviews) == 0:
+            # with open(f"{asin}.html", 'wb') as f:
+                # f.write(response.body)
+            yield None
 
         for div_review in div_reviews:
             name = div_review.css("span.a-profile-name::text").get()
@@ -91,17 +98,18 @@ class AmazonReviewsSpider(scrapy.Spider):
             text = (''.join(div_review.css(".review-text-content").xpath(".//text()").extract())).strip()
             vote = div_review.css(".cr-vote-text::text").get()
             verified = div_review.css('span[data-hook="avp-badge"]::text').get()
+            reviewer_id = div_review.css(".a-profile").xpath(".//@href").re('/profile/(.*)')[0]
 
             # Only get review from 2019
             if (int(date[-4:]) < 2019): 
                 break
 
-            yield{
+            item = {
                 "overall": float(rating[0:3]),
                 "vote": 0 if not vote else 1 if vote[0:3] == "One" else int(re.findall("\d+", vote)[0]),
                 "verified": verified == "Verified Purchase",
                 "reviewTime": date,
-                # "reviewerID": "A2UEO5XR3598GI",
+                 "reviewerID": reviewer_id,
                 "asin": asin,
                 # "style": {
                 #     "Size:": " 7.0 oz",
@@ -112,3 +120,9 @@ class AmazonReviewsSpider(scrapy.Spider):
                 "summary": title,
                 # "unixReviewTime": 1304380800
             }
+
+            # Push data to kafka
+            producer = KafkaProducer(bootstrap_servers='192.168.1.5:9092', value_serializer=lambda v: json.dumps(v).encode('utf-8'))
+            producer.send('bigdata', value=item)
+
+            yield item
